@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Interview Answer Evaluator — Demo</title>
+  <style>
+    body { font-family: Inter, system-ui, Arial; max-width:900px; margin:28px auto; line-height:1.5; color:#111 }
+    textarea { width:100%; min-height:120px; padding:10px; font-size:14px; border-radius:8px; border:1px solid #ddd }
+    input, button, select { padding:8px 12px; font-size:14px; border-radius:8px; border:1px solid #ccc }
+    .card { padding:16px; border-radius:10px; box-shadow: 0 6px 16px rgba(30,30,30,0.06); margin-bottom:12px }
+    .row { display:flex; gap:10px; align-items:center }
+    .muted { color:#666; font-size:13px }
+    .evidence { font-family: monospace; white-space:pre-wrap; background:#fbfbfb; padding:8px; border-radius:6px; margin-top:8px }
+    .score { font-weight:700; font-size:22px; color:#0b6; }
+  </style>
+</head>
+<body>
+  <h1>Interview Answer Evaluator — Demo</h1>
+  <div class="card">
+    <div class="muted">Question (editable):</div>
+    <input id="question" value="Why do you want this job?" />
+  </div>
+
+  <div class="card">
+    <div class="muted">Paste candidate answer:</div>
+    <textarea id="candidate">I enjoy working with teams and using data to make decisions.</textarea>
+    <div style="margin-top:10px" class="row">
+      <label class="muted">Top K:</label>
+      <select id="top_k">
+        <option>2</option>
+        <option selected>3</option>
+        <option>4</option>
+      </select>
+      <button id="evaluateBtn">Evaluate</button>
+      <div id="status" style="margin-left:12px" class="muted"></div>
+    </div>
+  </div>
+
+  <div id="resultArea"></div>
+
+<script>
+const base = 'http://127.0.0.1:8000';
+
+function showStatus(t){
+  document.getElementById('status').textContent = t;
+}
+
+async function evaluate(){
+  showStatus('Running...');
+  const question = document.getElementById('question').value;
+  const candidate = document.getElementById('candidate').value;
+  const top_k = parseInt(document.getElementById('top_k').value || '3', 10);
+
+  try{
+    const res = await fetch(base + '/evaluate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({candidate_answer: candidate, question, top_k})
+    });
+    if(!res.ok){
+      const txt = await res.text();
+      throw new Error(res.status + ' ' + txt);
+    }
+    const j = await res.json();
+    renderResult(j);
+    showStatus('Done');
+  }catch(err){
+    showStatus('Error: ' + (err.message || err));
+    document.getElementById('resultArea').innerHTML = '<div class="card"><b>Error</b><pre>' + String(err) + '</pre></div>';
+  }
+}
+
+function renderResult(obj){
+  const area = document.getElementById('resultArea');
+  area.innerHTML = '';
+  const card = document.createElement('div'); card.className='card';
+  card.innerHTML = `<div><span class="muted">Score</span> <div class="score">${obj.score ?? 'N/A'}</div></div>
+    <div style="margin-top:10px"><b>Suggested improvements</b><div>${obj.suggested_improvements ?? ''}</div></div>
+    <div style="margin-top:10px"><b>Missing points</b><div>${(obj.missing_points || []).join(', ') || '<i>None</i>'}</div></div>
+    <div style="margin-top:10px"><b>Evidence (top passages)</b></div>
+  `;
+  area.appendChild(card);
+
+  (obj.evidence || []).forEach(e=>{
+    const d = document.createElement('div'); d.className='card';
+    d.innerHTML = `<div style="font-weight:700">${e.id} — score:${Number(e.score || 0).toFixed(3)}</div>
+      <div class="evidence">${(e.excerpt || '').replace(/</g,'&lt;')}</div>`;
+    area.appendChild(d);
+  });
+}
+
+document.getElementById('evaluateBtn').addEventListener('click', evaluate);
+</script>
+</body>
+</html>
